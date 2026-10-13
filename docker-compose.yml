@@ -1,4 +1,49 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+
+    container_name: meeting-room-postgres
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-meetingroom}
+      POSTGRES_USER: ${POSTGRES_USER:-meetingroom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meetingroom_dev_password}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meetingroom} -d ${POSTGRES_DB:-meetingroom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+
+    container_name: meeting-room-pgadmin
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@meetingroom.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-meetingroom_dev_password}
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend/MeetingRoom.Api
@@ -12,6 +57,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-meetingroom};Username=${POSTGRES_USER:-meetingroom};Password=${POSTGRES_PASSWORD:-meetingroom_dev_password}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
 
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
@@ -21,3 +71,7 @@ services:
       start_period: 10s
 
     restart: unless-stopped
+
+volumes:
+  postgres-data:
+  pgadmin-data:

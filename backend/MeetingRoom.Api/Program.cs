@@ -1,16 +1,21 @@
 var builder = WebApplication.CreateBuilder(args);
 
+// Add services to the container.
+
+builder.Services.AddControllers();
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
 
-app.MapGet("/api/health", () =>
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
 {
-    return Results.Ok(new
-    {
-        status = "healthy",
-        message = "Meeting Room Booking API is running"
-    });
-});
+    app.MapOpenApi();
+}
 
+app.UseAuthorization();
 
+app.MapControllers();
 
 app.Run();

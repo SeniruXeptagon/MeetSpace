@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRoom.Api.Interfaces;
 
 namespace MeetingRoom.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/rooms")]
 [Produces("application/json")]
 public class RoomsController : ControllerBase

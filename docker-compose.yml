@@ -105,10 +105,17 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-meetingroom};Username=${POSTGRES_USER:-meetingroom};Password=${POSTGRES_PASSWORD:-meetingroom_dev_password}
+      Keycloak__Authority: http://keycloak:8080/realms/meeting-room
+      Keycloak__MetadataAddress: http://keycloak:8080/realms/meeting-room/.well-known/openid-configuration
+      Keycloak__ValidIssuer: http://localhost:8081/realms/meeting-room
+      Keycloak__Audience: meeting-room-api
+      Keycloak__RequireHttpsMetadata: "false"
 
     depends_on:
       postgres:
         condition: service_healthy
+      keycloak:
+        condition: service_started
 
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]

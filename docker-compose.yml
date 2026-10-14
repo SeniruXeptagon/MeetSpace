@@ -23,6 +23,53 @@ services:
 
     restart: unless-stopped
 
+  keycloak-db:
+    image: postgres:17-alpine
+
+    container_name: meeting-room-keycloak-db
+
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_password}
+
+    volumes:
+      - keycloak-postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0
+
+    container_name: meeting-room-keycloak
+
+    command: start-dev
+
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_dev_password}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_password}
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME: http://localhost:8081
+
+    ports:
+      - "8081:8080"
+
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4:latest
 
@@ -74,4 +121,5 @@ services:
 
 volumes:
   postgres-data:
+  keycloak-postgres-data:
   pgadmin-data:

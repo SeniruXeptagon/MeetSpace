@@ -25,4 +25,29 @@ public class RoomService : IRoomService
             ))
             .ToListAsync();
     }
+
+    public async Task<List<BookingResponse>> GetRoomBookingsAsync(int roomId, DateOnly date)
+    {
+        var dayStart = DateTime.SpecifyKind(
+            date.ToDateTime(TimeOnly.MinValue),
+            DateTimeKind.Utc
+        );
+        var dayEnd = dayStart.AddDays(1);
+
+        return await _dbContext.Bookings
+            .AsNoTracking()
+            .Where(booking =>
+                booking.RoomId == roomId &&
+                booking.StartTime < dayEnd &&
+                booking.EndTime > dayStart)
+            .OrderBy(booking => booking.StartTime)
+            .Select(booking => new BookingResponse(
+                booking.Id,
+                booking.UserId,
+                booking.RoomId,
+                booking.StartTime,
+                booking.EndTime
+            ))
+            .ToListAsync();
+    }
 }

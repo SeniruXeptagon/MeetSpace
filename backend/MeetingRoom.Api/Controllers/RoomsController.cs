@@ -24,4 +24,22 @@ public class RoomsController : ControllerBase
 
         return Ok(rooms);
     }
+
+    [HttpGet("{roomId:int}/bookings")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetRoomBookings(
+        int roomId,
+        [FromQuery] DateOnly date)
+    {
+        var rooms = await _roomService.GetAllRoomsAsync();
+
+        if (rooms.All(room => room.Id != roomId))
+        {
+            return NotFound(new { message = $"Room {roomId} was not found." });
+        }
+
+        var bookings = await _roomService.GetRoomBookingsAsync(roomId, date);
+
+        return Ok(bookings);
+    }
 }

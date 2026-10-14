@@ -20,6 +20,7 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.Authority = keycloakAuthority;
         options.MetadataAddress = builder.Configuration["Keycloak:MetadataAddress"]
             ?? $"{keycloakAuthority.TrimEnd('/')}/.well-known/openid-configuration";

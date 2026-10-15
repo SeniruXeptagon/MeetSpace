@@ -1,10 +1,13 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "./auth-context";
 
-export type Room = "Room A" | "Room B";
+export type Room = string;
+export type RoomInfo = { id: number; name: string };
 export type Booking = {
-  id: string;
+  id: number;
+  roomId: number;
   room: Room;
   date: string;
   start: number;
@@ -42,36 +45,126 @@ export function durationLabel(minutes: number) {
   return `${hours} hr ${remainder} min`;
 }
 
-const initialBookings = (): Booking[] => [
-  { id: "demo-1", room: "Room A", date: localDate(), start: 9 * 60 + 15, end: 10 * 60 + 20, title: "Product sync", mine: false, status: "Confirmed" },
-  { id: "demo-2", room: "Room A", date: localDate(), start: 12 * 60 + 40, end: 14 * 60 + 5, title: "Design review", mine: false, status: "Confirmed" },
-  { id: "demo-3", room: "Room A", date: localDate(), start: 15 * 60 + 35, end: 16 * 60 + 25, title: "Team catch-up", mine: false, status: "Confirmed" },
-  { id: "demo-4", room: "Room B", date: localDate(), start: 10 * 60 + 30, end: 11 * 60 + 55, title: "Planning session", mine: false, status: "Confirmed" },
-  { id: "demo-5", room: "Room B", date: localDate(), start: 14 * 60 + 10, end: 15 * 60 + 5, title: "Client call", mine: false, status: "Confirmed" },
-  { id: "demo-6", room: "Room B", date: localDate(1), start: 10 * 60, end: 11 * 60, title: "Weekly standup", mine: true, status: "Confirmed" },
-  { id: "demo-7", room: "Room A", date: localDate(2), start: 11 * 60, end: 12 * 60 + 30, title: "Project workshop", mine: true, status: "Confirmed" },
-];
+type ApiBooking = {
+  id: number;
+  roomId: number;
+  startTime: string;
+  endTime: string;
+  isMine: boolean;
+  isCancelled: boolean;
+};
+
+function minuteFromUtc(value: string) {
+  return Number(value.slice(11, 13)) * 60 + Number(value.slice(14, 16));
+}
+
+function timeForApi(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}:00`;
+}
+
+function toBooking(value: ApiBooking, rooms: RoomInfo[]): Booking {
+  return {
+    id: value.id,
+    roomId: value.roomId,
+    room: rooms.find((room) => room.id === value.roomId)?.name ?? `Room ${value.roomId}`,
+    date: value.startTime.slice(0, 10),
+    start: minuteFromUtc(value.startTime),
+    end: minuteFromUtc(value.endTime),
+    title: value.isMine ? "My meeting" : "Booked",
+    mine: value.isMine,
+    status: value.isCancelled ? "Cancelled" : "Confirmed",
+  };
+}
+
+export class BookingApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new BookingApiError(body?.message ?? `Booking API returned ${response.status}.`, response.status);
+  }
+  return response.json() as Promise<T>;
+}
 
 type BookingContextValue = {
+  rooms: RoomInfo[];
   bookings: Booking[];
-  addBooking: (booking: Omit<Booking, "id" | "mine" | "status">) => void;
-  cancelBooking: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  loadRoomBookings: (roomId: number, date: string) => Promise<Booking[]>;
+  addBooking: (booking: { roomId: number; date: string; start: number; end: number }) => Promise<Booking>;
+  cancelBooking: (id: number) => Promise<void>;
 };
 
 const BookingContext = createContext<BookingContextValue | null>(null);
 
 export function BookingProvider({ children }: { children: ReactNode }) {
-  const [bookings, setBookings] = useState<Booking[]>(initialBookings);
+  const { state, apiRequest } = useAuth();
+  const [rooms, setRooms] = useState<RoomInfo[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  function addBooking(booking: Omit<Booking, "id" | "mine" | "status">) {
-    setBookings((current) => [...current, { ...booking, id: `new-${Date.now()}-${Math.random()}`, mine: true, status: "Confirmed" }]);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [roomResponse, mineResponse] = await Promise.all([
+        apiRequest("/api/rooms"),
+        apiRequest("/api/bookings/mine"),
+      ]);
+      const nextRooms = await readResponse<RoomInfo[]>(roomResponse);
+      const mine = await readResponse<ApiBooking[]>(mineResponse);
+      setRooms(nextRooms);
+      setBookings(mine.map((booking) => toBooking(booking, nextRooms)));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load bookings.");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiRequest]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (state === "authenticated") queueMicrotask(() => { if (!cancelled) void refresh(); });
+    return () => { cancelled = true; };
+  }, [state, refresh]);
+
+  const loadRoomBookings = useCallback(async (roomId: number, date: string) => {
+    const response = await apiRequest(`/api/rooms/${roomId}/bookings?date=${encodeURIComponent(date)}`);
+    return (await readResponse<ApiBooking[]>(response)).map((booking) => toBooking(booking, rooms));
+  }, [apiRequest, rooms]);
+
+  async function addBooking(booking: { roomId: number; date: string; start: number; end: number }) {
+    const response = await apiRequest(`/api/rooms/${booking.roomId}/bookings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: booking.date, startTime: timeForApi(booking.start), endTime: timeForApi(booking.end) }),
+    });
+    const saved = toBooking(await readResponse<ApiBooking>(response), rooms);
+    setBookings((current) => [...current, saved]);
+    return saved;
   }
 
-  function cancelBooking(id: string) {
-    setBookings((current) => current.map((booking) => booking.id === id && booking.mine ? { ...booking, status: "Cancelled" } : booking));
+  async function cancelBooking(id: number) {
+    const response = await apiRequest(`/api/bookings/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { message?: string } | null;
+      throw new BookingApiError(body?.message ?? `Cancellation failed (${response.status}).`, response.status);
+    }
+    setBookings((current) => current.map((booking) => booking.id === id ? { ...booking, status: "Cancelled" } : booking));
   }
 
-  return <BookingContext.Provider value={{ bookings, addBooking, cancelBooking }}>{children}</BookingContext.Provider>;
+  return <BookingContext.Provider value={{
+    rooms: state === "authenticated" ? rooms : [],
+    bookings: state === "authenticated" ? bookings : [],
+    loading: state === "authenticated" ? loading : true,
+    error: state === "authenticated" ? error : null,
+    refresh, loadRoomBookings, addBooking, cancelBooking,
+  }}>{children}</BookingContext.Provider>;
 }
 
 export function useBookings() {

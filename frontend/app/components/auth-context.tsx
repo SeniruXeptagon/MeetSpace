@@ -11,6 +11,7 @@ type AuthContextValue = {
   error: string | null;
   login: (destination?: string) => Promise<void>;
   logout: () => Promise<void>;
+  apiRequest: (path: string, options?: RequestInit) => Promise<Response>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -21,6 +22,19 @@ const keycloak = new Keycloak({
 });
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 let initialization: Promise<boolean> | null = null;
+
+async function apiRequest(path: string, options: RequestInit = {}) {
+  await initialize();
+  if (!keycloak.authenticated) throw new Error("Please sign in again.");
+  await keycloak.updateToken(30);
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", `Bearer ${keycloak.token}`);
+  return fetch(`${apiUrl}${path}`, {
+    ...options,
+    headers,
+    cache: "no-store",
+  });
+}
 
 function initialize() {
   initialization ??= keycloak.init({
@@ -91,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await keycloak.logout({ redirectUri: `${window.location.origin}/login` });
   }
 
-  return <AuthContext.Provider value={{ state, profile, error, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ state, profile, error, login, logout, apiRequest }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

@@ -1,0 +1,27 @@
+.booking-api-error {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #f0c5d1;
+  border-radius: 10px;
+  background: #fff4f6;
+  color: #9e3650;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.booking-api-error button {
+  margin-left: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.booking-api-note {
+  margin: 14px 0;
+  color: #848a9e;
+  font-size: 12px;
+}

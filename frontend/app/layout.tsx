@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { BookingProvider } from "./components/booking-context";
 import { AuthProvider } from "./components/auth-context";
 import "./globals.css";
+import "./booking-api.css";
 
 export const metadata: Metadata = {
   title: "MeetSpace | Meeting room bookings",

@@ -14,8 +14,10 @@ The `.env.example` defaults target the Docker Compose endpoints. If you run the 
 
 Sign-in redirects to Keycloak. After returning, the frontend calls `GET /api/auth/me` with the access token. The dashboard and My Bookings pages remain behind the sign-in check. Logout ends the Keycloak session. Tokens stay in the Keycloak adapter's memory; reloading the page checks the Keycloak session again.
 
-Bookings still use in-memory React state and sample data. Creating and cancelling a booking in the UI does not call the backend booking API.
+Rooms and bookings now come from the backend. The dashboard loads room availability for the selected date, confirms a booking with `POST /api/rooms/{roomId}/bookings`, and shows server-side conflicts. My Bookings loads `GET /api/bookings/mine` and cancels with `DELETE /api/bookings/{id}`. Cancelled bookings remain in history and release their time slot. The backend applies database migrations at startup.
 
 ## Verify
 
 Run `npm run build` in `frontend` and `dotnet build backend/MeetingRoom.Api/MeetingRoom.Api.csproj` in the repository root. For a live check, sign in and confirm the browser's Network tab shows `GET /api/auth/me` returning 200. A 401 usually means the token issuer or audience does not match the API configuration; a browser CORS error usually means the frontend origin differs from the configured origin.
+
+For an automated local API flow check, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-booking-flow.ps1` from the repository root. It creates a temporary Keycloak service client, checks booking creation, availability, overlap rejection, cancellation, and rebooking, then removes the temporary client and its test records. This requires the running Docker services and the Keycloak admin credentials configured in the root `.env`.

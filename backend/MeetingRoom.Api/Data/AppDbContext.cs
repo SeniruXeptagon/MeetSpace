@@ -25,6 +25,10 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.UserName)
             .IsUnique();
 
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.KeycloakUserId)
+            .IsUnique();
+
         // Seed two meeting rooms
         modelBuilder.Entity<Room>().HasData(
             new Room { Id = 1, Name = "Room A" },

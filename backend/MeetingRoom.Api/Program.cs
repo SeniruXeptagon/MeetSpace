@@ -9,6 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Register controllers
 builder.Services.AddControllers();
+var frontendOrigin = builder.Configuration["Frontend:Origin"] ?? "http://localhost:3000";
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
+    policy.WithOrigins(frontendOrigin).AllowAnyHeader().AllowAnyMethod()));
 
 // Configure Keycloak JWT authentication
 var keycloakAuthority = builder.Configuration["Keycloak:Authority"]
@@ -53,6 +56,7 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 
 var app = builder.Build();
 
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 

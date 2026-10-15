@@ -1,16 +1,33 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import type { FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Logo } from "../components/app-shell";
+import { useAuth } from "../components/auth-context";
 import { Icon } from "../components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
+  const params = useSearchParams();
+  const { state, error, login } = useAuth();
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const requested = params.get("next");
+  const destination = requested === "/my-bookings" ? "/my-bookings" : "/dashboard";
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    router.push("/dashboard");
+  useEffect(() => {
+    if (state === "authenticated") router.replace(destination);
+  }, [state, destination, router]);
+
+  async function handleLogin() {
+    try {
+      setLoginError(null);
+      setSubmitting(true);
+      await login(destination);
+    } catch (cause) {
+      setLoginError(cause instanceof Error ? cause.message : "Could not start sign-in.");
+      setSubmitting(false);
+    }
   }
 
   return <div className="auth-page">
@@ -35,12 +52,9 @@ export default function LoginPage() {
         <div className="auth-kicker">WELCOME TO MEETSPACE</div>
         <h2>Good to have you back.</h2>
         <p className="auth-subtitle">Sign in to find your next meeting space.</p>
-        <form onSubmit={handleSubmit}>
-          <label className="field-label">Work email<input type="email" placeholder="you@company.com" autoComplete="email" required /></label>
-          <label className="field-label">Password<input type="password" placeholder="Enter your password" autoComplete="current-password" required /></label>
-          <button className="primary-button auth-submit" type="submit">Log in<Icon name="arrow" size={18} /></button>
-        </form>
-        <div className="auth-footnote"><Icon name="shield" size={16} /> Sign-in</div>
+        {(loginError || (state === "error" && error)) && <p className="auth-error" role="alert">{loginError ?? error}</p>}
+        {state === "error" ? <button className="primary-button auth-submit" type="button" onClick={() => window.location.reload()}>Try again<Icon name="arrow" size={18} /></button> : <button className="primary-button auth-submit" type="button" onClick={() => void handleLogin()} disabled={submitting || state === "authenticated"}>{submitting ? "Opening Keycloak…" : "Continue with Keycloak"}<Icon name="arrow" size={18} /></button>}
+        <div className="auth-footnote"><Icon name="shield" size={16} /> Secure sign-in through Keycloak</div>
       </div>
     </div>
   </div>;

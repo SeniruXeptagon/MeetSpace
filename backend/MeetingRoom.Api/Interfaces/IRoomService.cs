@@ -6,7 +6,11 @@ public interface IRoomService
 {
     Task<List<RoomResponse>> GetAllRoomsAsync();
 
-    Task<List<BookingResponse>> GetRoomBookingsAsync(int roomId, DateOnly date);
+    Task<List<BookingResponse>> GetRoomBookingsAsync(int roomId, DateOnly date, string keycloakUserId);
+
+    Task<List<BookingResponse>> GetMyBookingsAsync(string keycloakUserId);
+
+    Task<bool> CancelBookingAsync(int bookingId, string keycloakUserId);
 
     Task<BookingResponse?> CreateBookingAsync(
         int roomId,

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MeetingRoom.Api.DTOs;
 using MeetingRoom.Api.Interfaces;
+using System.Security.Claims;
 
 namespace MeetingRoom.Api.Controllers;
 
@@ -27,7 +28,6 @@ public class RoomsController : ControllerBase
     }
 
     [HttpGet("{roomId:int}/bookings")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetRoomBookings(
         int roomId,
         [FromQuery] DateOnly date)
@@ -39,7 +39,9 @@ public class RoomsController : ControllerBase
             return NotFound(new { message = $"Room {roomId} was not found." });
         }
 
-        var bookings = await _roomService.GetRoomBookingsAsync(roomId, date);
+        var keycloakUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub") ?? string.Empty;
+        var bookings = await _roomService.GetRoomBookingsAsync(roomId, date, keycloakUserId);
 
         return Ok(bookings);
     }
@@ -61,7 +63,8 @@ public class RoomsController : ControllerBase
             return NotFound(new { message = $"Room {roomId} was not found." });
         }
 
-        var keycloakUserId = User.FindFirst("sub")?.Value;
+        var keycloakUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
         var userName = User.FindFirst("preferred_username")?.Value
             ?? User.Identity?.Name;
         var email = User.FindFirst("email")?.Value;
@@ -89,7 +92,7 @@ public class RoomsController : ControllerBase
 
         return CreatedAtAction(
             nameof(GetRoomBookings),
-            new { roomId },
+            new { roomId, date = request.Date },
             booking
         );
     }

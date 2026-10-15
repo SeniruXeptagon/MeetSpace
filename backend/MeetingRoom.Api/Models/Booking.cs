@@ -12,4 +12,5 @@ public class Booking
 
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
+    public DateTime? CancelledAtUtc { get; set; }
 }

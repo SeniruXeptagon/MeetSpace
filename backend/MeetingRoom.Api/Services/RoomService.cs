@@ -3,6 +3,7 @@ using MeetingRoom.Api.Data;
 using MeetingRoom.Api.DTOs;
 using MeetingRoom.Api.Interfaces;
 using MeetingRoom.Api.Models;
+using Npgsql;
 
 namespace MeetingRoom.Api.Services;
 
@@ -27,7 +28,7 @@ public class RoomService : IRoomService
             .ToListAsync();
     }
 
-    public async Task<List<BookingResponse>> GetRoomBookingsAsync(int roomId, DateOnly date)
+    public async Task<List<BookingResponse>> GetRoomBookingsAsync(int roomId, DateOnly date, string keycloakUserId)
     {
         var dayStart = DateTime.SpecifyKind(
             date.ToDateTime(TimeOnly.MinValue),
@@ -39,23 +40,50 @@ public class RoomService : IRoomService
             .AsNoTracking()
             .Where(booking =>
                 booking.RoomId == roomId &&
+                booking.CancelledAtUtc == null &&
                 booking.StartTime < dayEnd &&
                 booking.EndTime > dayStart)
             .OrderBy(booking => booking.StartTime)
             .Select(booking => new BookingResponse(
                 booking.Id,
-                booking.UserId,
                 booking.RoomId,
-                new UserResponse(
-                    booking.User.Id,
-                    booking.User.KeycloakUserId ?? string.Empty,
-                    booking.User.UserName,
-                    booking.User.Email
-                ),
                 booking.StartTime,
-                booking.EndTime
+                booking.EndTime,
+                booking.User.KeycloakUserId == keycloakUserId,
+                false
             ))
             .ToListAsync();
+    }
+
+    public async Task<List<BookingResponse>> GetMyBookingsAsync(string keycloakUserId)
+    {
+        return await _dbContext.Bookings
+            .AsNoTracking()
+            .Where(booking => booking.User.KeycloakUserId == keycloakUserId)
+            .OrderBy(booking => booking.StartTime)
+            .Select(booking => new BookingResponse(
+                booking.Id,
+                booking.RoomId,
+                booking.StartTime,
+                booking.EndTime,
+                true,
+                booking.CancelledAtUtc != null
+            ))
+            .ToListAsync();
+    }
+
+    public async Task<bool> CancelBookingAsync(int bookingId, string keycloakUserId)
+    {
+        var booking = await _dbContext.Bookings
+            .SingleOrDefaultAsync(existing => existing.Id == bookingId
+                && existing.User.KeycloakUserId == keycloakUserId);
+        if (booking is null) return false;
+        if (booking.CancelledAtUtc is null)
+        {
+            booking.CancelledAtUtc = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+        }
+        return true;
     }
 
     public async Task<BookingResponse?> CreateBookingAsync(
@@ -76,6 +104,7 @@ public class RoomService : IRoomService
 
         var hasConflict = await _dbContext.Bookings.AnyAsync(booking =>
             booking.RoomId == roomId &&
+            booking.CancelledAtUtc == null &&
             booking.StartTime < dayEnd &&
             booking.EndTime > dayStart);
 
@@ -92,7 +121,8 @@ public class RoomService : IRoomService
         {
             // Match an existing legacy user once, then associate it with Keycloak.
             user = await _dbContext.Users
-                .SingleOrDefaultAsync(existingUser => existingUser.UserName == userName);
+                .SingleOrDefaultAsync(existingUser => existingUser.UserName == userName
+                    && existingUser.KeycloakUserId == null);
         }
 
         if (user is null)
@@ -123,20 +153,25 @@ public class RoomService : IRoomService
         };
 
         _dbContext.Bookings.Add(booking);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException postgres
+            && postgres.SqlState == PostgresErrorCodes.ExclusionViolation)
+        {
+            // The database constraint resolves races between simultaneous requests.
+            return null;
+        }
 
         return new BookingResponse(
             booking.Id,
-            booking.UserId,
             booking.RoomId,
-            new UserResponse(
-                user.Id,
-                user.KeycloakUserId ?? string.Empty,
-                user.UserName,
-                user.Email
-            ),
             booking.StartTime,
-            booking.EndTime
+            booking.EndTime,
+            true,
+            false
         );
     }
 }
